@@ -65,6 +65,7 @@ class MarketTokenizer:
                     ", "))): value for key, value in merges.items()}
             with open(os.path.join(load_path, 'vocab.json')) as f:
                 self.vocab = json.load(f)
+                self.vocab = {int(k): v for k, v in self.vocab.items()}
 
     def merge(self, ids, pair, idx):
         newids = []
@@ -124,7 +125,7 @@ class MarketTokenizer:
             self.vocab[idx] = self.vocab[p0] + " " + self.vocab[p1]
 
         # convert the merges key from tuple to str
-
+        os.makedirs(save_path, exist_ok=True)
         save_file_path = os.path.join(save_path, 'merges.json')
         merges = {str(key): value for key, value in self.merges.items()}
         with open(save_file_path, 'w') as f:
