@@ -46,12 +46,18 @@ stoi, itos = get_itos_dicts()
 class MarketTokenizer:
 
     def __init__(self,
-                 load_path: str = None):
+                 load_path: str = None, pad_token: str = '<pad>'):
 
         self.stoi, self.itos = get_itos_dicts()
         self.unique_tokens = max(self.itos)
         self.merges = {}
         self.vocab = {}
+        self.pad_token = pad_token
+        if pad_token:
+            self.unique_tokens += 1
+            self.itos[max(itos) + 1] = pad_token
+            self.stoi[self.pad_token] = self.itos[max(itos)]
+
         if load_path:
             with open(os.path.join(load_path, 'merges.json'), 'r') as f:
                 merges = json.load(f)
