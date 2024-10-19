@@ -1,5 +1,6 @@
 import json
 import os
+import torch
 from tqdm import tqdm
 
 
@@ -85,7 +86,7 @@ class MarketTokenizer:
             counts[pair] = counts.get(pair, 0) + 1
         return counts
 
-    def encode(self, text: str):
+    def encode(self, text: str, return_pt: bool = False):
         assert len(self.vocab) > 0
         tokens = [stoi[w.lower()] for w in text.split()]
         while len(tokens) >= 2:
@@ -95,6 +96,9 @@ class MarketTokenizer:
                 break  # nothing can be merged
             idx = self.merges[pair]
             tokens = self.merge(tokens, pair, idx)
+
+        if return_pt:
+            tokens = torch.tensor(tokens, dtype=torch.long)
         return tokens
 
     def decode(self, ids):
