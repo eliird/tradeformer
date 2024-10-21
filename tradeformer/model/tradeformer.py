@@ -1,3 +1,4 @@
+import inspect
 import math
 import torch
 import torch.nn as nn
@@ -44,10 +45,11 @@ class CausalSelfAttention(nn.Module):
         v = v.view(B, T, self.n_head, C //
                    self.n_head).transpose(1, 2)  # B, nh, T, hs
 
-        att = (q @ k.transpose(-2, -1)) * (1.0/math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        y = att @ v
+        # att = (q @ k.transpose(-2, -1)) * (1.0/math.sqrt(k.size(-1)))
+        # att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
+        # att = F.softmax(att, dim=-1)
+        # y = att @ v
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         y = self.c_proj(y)
         return y
@@ -102,6 +104,33 @@ class TradeFormer(nn.Module):
         self.lm_head = nn.Linear(cfg.n_embed, cfg.vocab_size, bias=False)
         self.transformer.wte.weight = self.lm_head.weight
 
+    def configure_optimizer(self, lr, weight_decay, device):
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+
+        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+        nondecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+
+        optim_groups = [
+            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': nondecay_params, 'weight_decay': 0.0},
+        ]
+
+        num_deay_params = sum(p.numel() for p in decay_params)
+        num_nondeay_params = sum(p.numel() for p in nondecay_params)
+
+        print(f"num decayed parameters: {
+              len(decay_params)} with {num_deay_params}")
+        print(
+            f"num non-decayed parameters: {len(nondecay_params)} with {num_nondeay_params}")
+        fused_available = 'fused' in inspect.signature(
+            torch.optim.AdamW).parameters
+        use_fused = fused_available and 'cuda' in device
+
+        optimizer = torch.optim.AdamW(
+            optim_groups, lr=lr, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
+        return optimizer
+
     def forward(self, idx, targets=None):
         B, T = idx.size()
 
@@ -122,5 +151,6 @@ class TradeFormer(nn.Module):
         loss = None
 
         if targets is not None:
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)), targets.view(-1))
         return (logits, loss)
